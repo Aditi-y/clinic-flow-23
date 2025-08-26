@@ -9,7 +9,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm",
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:
@@ -18,6 +18,9 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        medical: "bg-gradient-to-r from-medical-blue to-medical-blue hover:from-medical-blue/90 hover:to-medical-blue/90 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200",
+        "medical-outline": "border-2 border-medical-blue text-medical-blue bg-white hover:bg-medical-blue hover:text-white transition-all duration-200",
+        success: "bg-medical-green text-white hover:bg-medical-green/90 shadow-sm",
       },
       size: {
         default: "h-10 px-4 py-2",
