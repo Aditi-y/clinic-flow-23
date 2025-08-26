@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { UserPlus, DollarSign, Users, LogOut, Phone, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 // Mock data - will be replaced with Supabase data
 const mockPatients = [
@@ -80,6 +81,19 @@ const ReceptionistDashboard = () => {
     });
   };
 
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      window.location.href = "/";
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to logout. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Waiting": return "bg-yellow-100 text-yellow-800";
@@ -102,7 +116,7 @@ const ReceptionistDashboard = () => {
                 <p className="text-sm text-medical-gray">Manage patients and appointments</p>
               </div>
             </div>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="h-4 w-4 mr-2" />
               Logout
             </Button>

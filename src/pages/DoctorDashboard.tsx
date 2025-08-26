@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Stethoscope, LogOut, User, FileText, History, PlusCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 // Mock data - will be replaced with Supabase data
 const mockPatients = [
@@ -87,6 +88,19 @@ const DoctorDashboard = () => {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      window.location.href = "/";
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to logout. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const startConsultation = (patient: any) => {
     setPatients(patients.map(p => 
       p.id === patient.id ? { ...p, status: "In Consultation" } : p
@@ -107,7 +121,7 @@ const DoctorDashboard = () => {
                 <p className="text-sm text-medical-gray">Patient consultations and prescriptions</p>
               </div>
             </div>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="h-4 w-4 mr-2" />
               Logout
             </Button>
