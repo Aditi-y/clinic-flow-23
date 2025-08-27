@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,35 +10,22 @@ import { UserPlus, DollarSign, Users, LogOut, Phone, Calendar } from "lucide-rea
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
-// Mock data - will be replaced with Supabase data
-const mockPatients = [
-  {
-    id: 1,
-    token: "T001",
-    name: "John Doe",
-    age: 35,
-    gender: "Male",
-    contact: "+1234567890",
-    symptoms: "Fever, headache",
-    status: "Waiting",
-    charges: 50
-  },
-  {
-    id: 2,
-    token: "T002", 
-    name: "Jane Smith",
-    age: 28,
-    gender: "Female",
-    contact: "+1234567891",
-    symptoms: "Cough, sore throat",
-    status: "In Consultation",
-    charges: 75
-  }
-];
+interface Patient {
+  id: string;
+  token: string;
+  name: string;
+  age: number;
+  gender: string;
+  contact: string;
+  symptoms: string;
+  status: string;
+  charges: number;
+}
 
 const ReceptionistDashboard = () => {
-  const [patients, setPatients] = useState(mockPatients);
+  const [patients, setPatients] = useState<Patient[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [newPatient, setNewPatient] = useState({
     name: "",
     age: "",
@@ -48,37 +35,115 @@ const ReceptionistDashboard = () => {
   });
   const { toast } = useToast();
 
-  const handleAddPatient = (e: React.FormEvent) => {
-    e.preventDefault();
-    const token = `T${String(patients.length + 1).padStart(3, '0')}`;
-    const patient = {
-      id: patients.length + 1,
-      token,
-      ...newPatient,
-      age: parseInt(newPatient.age),
-      status: "Waiting",
-      charges: 0
-    };
-    
-    setPatients([...patients, patient]);
-    setNewPatient({ name: "", age: "", gender: "", contact: "", symptoms: "" });
-    setShowAddForm(false);
-    
-    toast({
-      title: "Patient Added Successfully",
-      description: `Token ${token} assigned to ${newPatient.name}`,
-    });
+  // Fetch patients from Supabase
+  const fetchPatients = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPatients(data || []);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch patients",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleAssignCharges = (patientId: number, charges: number) => {
-    setPatients(patients.map(p => 
-      p.id === patientId ? { ...p, charges } : p
-    ));
-    
-    toast({
-      title: "Charges Updated",
-      description: `Consultation charges of $${charges} assigned`,
-    });
+  useEffect(() => {
+    fetchPatients();
+  }, []);
+
+  const handleAddPatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to add patients",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Generate token based on existing patients count
+      const { count } = await supabase
+        .from('patients')
+        .select('*', { count: 'exact', head: true });
+
+      const token = `T${String((count || 0) + 1).padStart(3, '0')}`;
+
+      // Insert patient into Supabase
+      const { data, error } = await supabase
+        .from('patients')
+        .insert({
+          token,
+          name: newPatient.name,
+          age: parseInt(newPatient.age),
+          gender: newPatient.gender,
+          contact: newPatient.contact,
+          symptoms: newPatient.symptoms,
+          status: "Waiting",
+          charges: 0,
+          user_id: user.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Refresh patients list
+      await fetchPatients();
+      setNewPatient({ name: "", age: "", gender: "", contact: "", symptoms: "" });
+      setShowAddForm(false);
+
+      toast({
+        title: "Patient Added Successfully",
+        description: `Token ${token} assigned to ${newPatient.name}`,
+      });
+    } catch (error) {
+      console.error('Error adding patient:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add patient. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAssignCharges = async (patientId: string, charges: number) => {
+    try {
+      const { error } = await supabase
+        .from('patients')
+        .update({ charges })
+        .eq('id', patientId);
+
+      if (error) throw error;
+
+      // Refresh patients list
+      await fetchPatients();
+
+      toast({
+        title: "Charges Updated",
+        description: `Consultation charges of ₹${charges} assigned`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update charges. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleLogout = async () => {
@@ -156,7 +221,7 @@ const ReceptionistDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ${patients.reduce((sum, p) => sum + p.charges, 0)}
+                ₹{patients.reduce((sum, p) => sum + p.charges, 0)}
               </div>
             </CardContent>
           </Card>
@@ -240,7 +305,9 @@ const ReceptionistDashboard = () => {
                 </div>
                 
                 <div className="md:col-span-2 flex gap-2">
-                  <Button type="submit" variant="medical">Add Patient</Button>
+                  <Button type="submit" variant="medical" disabled={loading}>
+                    {loading ? "Adding..." : "Add Patient"}
+                  </Button>
                   <Button type="button" variant="outline" onClick={() => setShowAddForm(false)}>
                     Cancel
                   </Button>
@@ -286,13 +353,13 @@ const ReceptionistDashboard = () => {
                       <strong>Symptoms:</strong> {patient.symptoms}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>Charges: ${patient.charges}</span>
+                      <span>Charges: ₹{patient.charges}</span>
                       {patient.charges === 0 && (
                         <Button
                           size="sm"
                           variant="medical-outline"
                           onClick={() => {
-                            const charges = prompt("Enter consultation charges:");
+                            const charges = prompt("Enter consultation charges (₹):");
                             if (charges) handleAssignCharges(patient.id, parseInt(charges));
                           }}
                         >
