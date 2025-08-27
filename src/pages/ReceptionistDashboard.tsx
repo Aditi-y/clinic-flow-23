@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, DollarSign, Users, LogOut, Phone, Calendar } from "lucide-react";
+import { UserPlus, DollarSign, Users, LogOut, Phone, Calendar, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -141,6 +141,35 @@ const ReceptionistDashboard = () => {
       toast({
         title: "Error",
         description: "Failed to update charges. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeletePatient = async (patientId: string, patientName: string) => {
+    if (!confirm(`Are you sure you want to delete patient ${patientName}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('patients')
+        .delete()
+        .eq('id', patientId);
+
+      if (error) throw error;
+
+      // Refresh patients list
+      await fetchPatients();
+
+      toast({
+        title: "Patient Deleted",
+        description: `${patientName} has been removed from the system`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete patient. Please try again.",
         variant: "destructive",
       });
     }
@@ -354,19 +383,29 @@ const ReceptionistDashboard = () => {
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Charges: ₹{patient.charges}</span>
-                      {patient.charges === 0 && (
+                      <div className="flex gap-2">
+                        {patient.charges === 0 && (
+                          <Button
+                            size="sm"
+                            variant="medical-outline"
+                            onClick={() => {
+                              const charges = prompt("Enter consultation charges (₹):");
+                              if (charges) handleAssignCharges(patient.id, parseInt(charges));
+                            }}
+                          >
+                            <DollarSign className="h-3 w-3 mr-1" />
+                            Assign
+                          </Button>
+                        )}
                         <Button
                           size="sm"
-                          variant="medical-outline"
-                          onClick={() => {
-                            const charges = prompt("Enter consultation charges (₹):");
-                            if (charges) handleAssignCharges(patient.id, parseInt(charges));
-                          }}
+                          variant="destructive"
+                          onClick={() => handleDeletePatient(patient.id, patient.name)}
                         >
-                          <DollarSign className="h-3 w-3 mr-1" />
-                          Assign
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Delete
                         </Button>
-                      )}
+                      </div>
                     </div>
                   </div>
                 </div>

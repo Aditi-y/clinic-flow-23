@@ -31,29 +31,12 @@ const DoctorDashboard = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Fetch patients from Supabase
+  // Use enhanced fetch function
   const fetchPatients = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('patients')
-        .select('*')
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-      setPatients(data || []);
-    } catch (error) {
-      console.error('Error fetching patients:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load patients",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
+    await fetchPatientsWithPrescriptions();
   };
 
-  // Fetch patient history and prescriptions
+  // Fetch patient history and prescriptions with enhanced data
   const fetchPatientDetails = async (patientId: string) => {
     try {
       const [historyResponse, prescriptionsResponse] = await Promise.all([
@@ -76,6 +59,31 @@ const DoctorDashboard = () => {
     } catch (error) {
       console.error('Error fetching patient details:', error);
       return { history: [], prescriptions: [] };
+    }
+  };
+
+  // Enhanced fetch patients with prescriptions
+  const fetchPatientsWithPrescriptions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('patients')
+        .select(`
+          *,
+          prescriptions:prescriptions(*)
+        `)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setPatients(data || []);
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load patients",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -108,6 +116,19 @@ const DoctorDashboard = () => {
         });
 
       if (prescriptionError) throw prescriptionError;
+
+      // Add to patient history
+      const { error: historyError } = await supabase
+        .from('patient_history')
+        .insert({
+          patient_id: selectedPatient.id,
+          visit_date: new Date().toISOString().split('T')[0],
+          symptoms: selectedPatient.symptoms,
+          prescription: prescription.trim(),
+          charges: selectedPatient.charges || 0
+        });
+
+      if (historyError) throw historyError;
 
       // Update patient status to "Completed"
       const { error: statusError } = await supabase
@@ -296,6 +317,12 @@ const DoctorDashboard = () => {
                         </p>
                         <div className="bg-gray-50 p-3 rounded-md">
                           <p className="text-sm"><strong>Symptoms:</strong> {patient.symptoms}</p>
+                          {patient.prescriptions && patient.prescriptions.length > 0 && (
+                            <div className="mt-2 p-2 bg-green-50 rounded-md border-l-4 border-green-400">
+                              <p className="text-sm font-medium text-green-800">Latest Prescription:</p>
+                              <p className="text-sm text-green-700">{patient.prescriptions[0].prescription_text}</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -355,46 +382,47 @@ const DoctorDashboard = () => {
                         </DialogContent>
                       </Dialog>
                       
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedPatient(patient);
-                              setShowHistory(true);
-                            }}
-                          >
-                            <History className="h-4 w-4 mr-1" />
-                            History
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[700px]">
-                          <DialogHeader>
-                            <DialogTitle>Patient History - {patient.name}</DialogTitle>
-                            <DialogDescription>
-                              Previous visits and prescriptions
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                            {patient.history && patient.history.length > 0 ? (
-                              patient.history.map((visit, index) => (
-                                <div key={index} className="border rounded-lg p-4">
-                                  <div className="flex justify-between items-start mb-2">
-                                    <h4 className="font-medium">Visit {index + 1}</h4>
-                                    <span className="text-sm text-medical-gray">{visit.date}</span>
-                                  </div>
-                                  <p className="text-sm mb-2"><strong>Symptoms:</strong> {visit.symptoms}</p>
-                                  <p className="text-sm mb-2"><strong>Prescription:</strong> {visit.prescription}</p>
-                                  <p className="text-sm"><strong>Charges:</strong> ${visit.charges}</p>
-                                </div>
-                              ))
-                            ) : (
-                              <p className="text-center text-medical-gray py-8">No previous visits found</p>
-                            )}
-                          </div>
-                        </DialogContent>
-                      </Dialog>
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={async () => {
+                                  const details = await fetchPatientDetails(patient.id);
+                                  setSelectedPatient({ ...patient, ...details });
+                                  setShowHistory(true);
+                                }}
+                              >
+                                <History className="h-4 w-4 mr-1" />
+                                History
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[700px]">
+                              <DialogHeader>
+                                <DialogTitle>Patient History - {patient.name}</DialogTitle>
+                                <DialogDescription>
+                                  Previous visits and prescriptions
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4 max-h-[400px] overflow-y-auto">
+                                {selectedPatient?.history && selectedPatient.history.length > 0 ? (
+                                  selectedPatient.history.map((visit: any, index: number) => (
+                                    <div key={index} className="border rounded-lg p-4">
+                                      <div className="flex justify-between items-start mb-2">
+                                        <h4 className="font-medium">Visit {index + 1}</h4>
+                                        <span className="text-sm text-medical-gray">{new Date(visit.visit_date).toLocaleDateString()}</span>
+                                      </div>
+                                      <p className="text-sm mb-2"><strong>Symptoms:</strong> {visit.symptoms}</p>
+                                      <p className="text-sm mb-2"><strong>Prescription:</strong> {visit.prescription}</p>
+                                      <p className="text-sm"><strong>Charges:</strong> ₹{visit.charges}</p>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-center text-medical-gray py-8">No previous visits found</p>
+                                )}
+                              </div>
+                            </DialogContent>
+                          </Dialog>
                     </div>
                   </div>
                 </div>
