@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,75 +8,133 @@ import { Stethoscope, LogOut, User, FileText, History, PlusCircle } from "lucide
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
-// Mock data - will be replaced with Supabase data
-const mockPatients = [
-  {
-    id: 1,
-    token: "T001",
-    name: "John Doe",
-    age: 35,
-    gender: "Male",
-    contact: "+1234567890",
-    symptoms: "Fever, headache, body aches for 3 days",
-    status: "Waiting",
-    charges: 50,
-    prescriptions: [],
-    history: [
-      {
-        date: "2024-01-15",
-        symptoms: "Common cold",
-        prescription: "Rest, fluids, paracetamol",
-        charges: 40
-      }
-    ]
-  },
-  {
-    id: 2,
-    token: "T002", 
-    name: "Jane Smith",
-    age: 28,
-    gender: "Female",
-    contact: "+1234567891",
-    symptoms: "Persistent cough, sore throat, mild fever",
-    status: "In Consultation",
-    charges: 75,
-    prescriptions: [],
-    history: []
-  }
-];
+interface Patient {
+  id: string;
+  token: string;
+  name: string;
+  age: number;
+  gender: string;
+  contact: string;
+  symptoms: string;
+  status: string;
+  charges: number;
+  created_at: string;
+  prescriptions?: any[];
+  history?: any[];
+}
 
 const DoctorDashboard = () => {
-  const [patients, setPatients] = useState(mockPatients);
-  const [selectedPatient, setSelectedPatient] = useState<any>(null);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [prescription, setPrescription] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  const handleAddPrescription = () => {
+  // Fetch patients from Supabase
+  const fetchPatients = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setPatients(data || []);
+    } catch (error) {
+      console.error('Error fetching patients:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load patients",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch patient history and prescriptions
+  const fetchPatientDetails = async (patientId: string) => {
+    try {
+      const [historyResponse, prescriptionsResponse] = await Promise.all([
+        supabase
+          .from('patient_history')
+          .select('*')
+          .eq('patient_id', patientId)
+          .order('visit_date', { ascending: false }),
+        supabase
+          .from('prescriptions')
+          .select('*')
+          .eq('patient_id', patientId)
+          .order('created_at', { ascending: false })
+      ]);
+
+      return {
+        history: historyResponse.data || [],
+        prescriptions: prescriptionsResponse.data || []
+      };
+    } catch (error) {
+      console.error('Error fetching patient details:', error);
+      return { history: [], prescriptions: [] };
+    }
+  };
+
+  useEffect(() => {
+    fetchPatients();
+  }, []);
+
+  const handleAddPrescription = async () => {
     if (!selectedPatient || !prescription.trim()) return;
 
-    const updatedPatients = patients.map(p => 
-      p.id === selectedPatient.id 
-        ? { 
-            ...p, 
-            prescriptions: [...(p.prescriptions || []), {
-              date: new Date().toISOString().split('T')[0],
-              prescription: prescription.trim(),
-              doctor: "Dr. Current User" // Will be dynamic with auth
-            }],
-            status: "Completed"
-          }
-        : p
-    );
+    try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to add prescriptions",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    setPatients(updatedPatients);
-    setPrescription("");
-    setSelectedPatient(null);
-    
-    toast({
-      title: "Prescription Added",
-      description: `Prescription added for ${selectedPatient.name}`,
-    });
+      // Save prescription to database
+      const { error: prescriptionError } = await supabase
+        .from('prescriptions')
+        .insert({
+          patient_id: selectedPatient.id,
+          prescription_text: prescription.trim(),
+          doctor_id: user.id
+        });
+
+      if (prescriptionError) throw prescriptionError;
+
+      // Update patient status to "Completed"
+      const { error: statusError } = await supabase
+        .from('patients')
+        .update({ status: "Completed" })
+        .eq('id', selectedPatient.id);
+
+      if (statusError) throw statusError;
+
+      // Refresh patient data
+      await fetchPatients();
+      
+      setPrescription("");
+      setSelectedPatient(null);
+      
+      toast({
+        title: "Prescription Added",
+        description: `Prescription saved successfully for ${selectedPatient.name}`,
+      });
+    } catch (error) {
+      console.error('Error saving prescription:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save prescription. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -101,11 +159,34 @@ const DoctorDashboard = () => {
     }
   };
 
-  const startConsultation = (patient: any) => {
-    setPatients(patients.map(p => 
-      p.id === patient.id ? { ...p, status: "In Consultation" } : p
-    ));
-    setSelectedPatient(patient);
+  const startConsultation = async (patient: Patient) => {
+    try {
+      // Update patient status in database
+      const { error } = await supabase
+        .from('patients')
+        .update({ status: "In Consultation" })
+        .eq('id', patient.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setPatients(patients.map(p => 
+        p.id === patient.id ? { ...p, status: "In Consultation" } : p
+      ));
+      setSelectedPatient(patient);
+
+      toast({
+        title: "Consultation Started",
+        description: `Started consultation for ${patient.name}`,
+      });
+    } catch (error) {
+      console.error('Error starting consultation:', error);
+      toast({
+        title: "Error",
+        description: "Failed to start consultation. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -186,6 +267,15 @@ const DoctorDashboard = () => {
             <CardDescription>All patients scheduled for today</CardDescription>
           </CardHeader>
           <CardContent>
+            {loading ? (
+              <div className="text-center py-8">
+                <p className="text-medical-gray">Loading patients...</p>
+              </div>
+            ) : patients.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-medical-gray">No patients found</p>
+              </div>
+            ) : (
             <div className="space-y-4">
               {patients.map((patient) => (
                 <div key={patient.id} className="border rounded-lg p-6 bg-white hover:shadow-md transition-shadow">
@@ -310,6 +400,7 @@ const DoctorDashboard = () => {
                 </div>
               ))}
             </div>
+            )}
           </CardContent>
         </Card>
       </div>
