@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, DollarSign, Users, LogOut, Phone, Calendar, Trash2 } from "lucide-react";
+import { UserPlus, IndianRupee, Users, LogOut, Phone, Calendar, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -246,7 +246,7 @@ const ReceptionistDashboard = () => {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Revenue Today</CardTitle>
-              <DollarSign className="h-4 w-4 text-medical-green" />
+              <IndianRupee className="h-4 w-4 text-medical-green" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
@@ -393,7 +393,7 @@ const ReceptionistDashboard = () => {
                               if (charges) handleAssignCharges(patient.id, parseInt(charges));
                             }}
                           >
-                            <DollarSign className="h-3 w-3 mr-1" />
+                            <IndianRupee className="h-3 w-3 mr-1" />
                             Assign
                           </Button>
                         )}
