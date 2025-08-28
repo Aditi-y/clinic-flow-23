@@ -73,11 +73,20 @@ const ReceptionistDashboard = () => {
         return;
       }
 
-      const { count } = await supabase
+      // Get all existing tokens to find the next available one
+      const { data: existingPatients } = await supabase
         .from('patients')
-        .select('*', { count: 'exact', head: true });
+        .select('token')
+        .order('token', { ascending: true });
 
-      const token = `T${String((count || 0) + 1).padStart(3, '0')}`;
+      // Find the next available token number
+      const existingTokens = existingPatients?.map(p => parseInt(p.token.substring(1))) || [];
+      let nextTokenNumber = 1;
+      while (existingTokens.includes(nextTokenNumber)) {
+        nextTokenNumber++;
+      }
+      
+      const token = `T${String(nextTokenNumber).padStart(3, '0')}`;
 
       const { data, error } = await supabase
         .from('patients')
