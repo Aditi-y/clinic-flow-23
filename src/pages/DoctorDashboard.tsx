@@ -31,52 +31,49 @@ const DoctorDashboard = () => {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Use enhanced fetch function
   const fetchPatients = async () => {
     await fetchPatientsWithPrescriptions();
   };
 
-  // Fetch patient history and prescriptions with enhanced data
   const fetchPatientDetails = async (patientId: string) => {
     try {
       const [historyResponse, prescriptionsResponse] = await Promise.all([
         supabase
-          .from('patient_history')
-          .select('*')
-          .eq('patient_id', patientId)
-          .order('visit_date', { ascending: false }),
+          .from("patient_history")
+          .select("*")
+          .eq("patient_id", patientId)
+          .order("visit_date", { ascending: false }),
         supabase
-          .from('prescriptions')
-          .select('*')
-          .eq('patient_id', patientId)
-          .order('created_at', { ascending: false })
+          .from("prescriptions")
+          .select("*")
+          .eq("patient_id", patientId)
+          .order("created_at", { ascending: false }),
       ]);
 
       return {
         history: historyResponse.data || [],
-        prescriptions: prescriptionsResponse.data || []
+        prescriptions: prescriptionsResponse.data || [],
       };
     } catch (error) {
-      console.error('Error fetching patient details:', error);
+      console.error("Error fetching patient details:", error);
       return { history: [], prescriptions: [] };
     }
   };
 
-  // Enhanced fetch patients with prescriptions
   const fetchPatientsWithPrescriptions = async () => {
     try {
       const { data, error } = await supabase
-        .from('patients')
+        .from("patients")
         .select(`
           *,
           prescriptions:prescriptions(*)
         `)
-        .order('created_at', { ascending: true });
+        .order("created_at", { ascending: true });
 
       if (error) throw error;
       setPatients(data || []);
     } catch (error) {
-      console.error('Error fetching patients:', error);
+      console.error("Error fetching patients:", error);
       toast({
         title: "Error",
         description: "Failed to load patients",
@@ -95,8 +92,9 @@ const DoctorDashboard = () => {
     if (!selectedPatient || !prescription.trim()) return;
 
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
         toast({
           title: "Error",
@@ -106,50 +104,55 @@ const DoctorDashboard = () => {
         return;
       }
 
-      // Save prescription to database
-      const { error: prescriptionError } = await supabase
-        .from('prescriptions')
-        .insert({
-          patient_id: selectedPatient.id,
-          prescription_text: prescription.trim(),
-          doctor_id: user.id
-        });
-
+      const { error: prescriptionError } = await supabase.from("prescriptions").insert({
+        patient_id: selectedPatient.id,
+        prescription_text: prescription.trim(),
+        doctor_id: user.id,
+      });
       if (prescriptionError) throw prescriptionError;
 
-      // Add to patient history
-      const { error: historyError } = await supabase
-        .from('patient_history')
-        .insert({
-          patient_id: selectedPatient.id,
-          visit_date: new Date().toISOString().split('T')[0],
-          symptoms: selectedPatient.symptoms,
-          prescription: prescription.trim(),
-          charges: selectedPatient.charges || 0
-        });
-
+      const { error: historyError } = await supabase.from("patient_history").insert({
+        patient_id: selectedPatient.id,
+        visit_date: new Date().toISOString().split("T")[0],
+        symptoms: selectedPatient.symptoms,
+        prescription: prescription.trim(),
+        charges: selectedPatient.charges || 0,
+      });
       if (historyError) throw historyError;
 
-      // Update patient status to "Completed"
       const { error: statusError } = await supabase
-        .from('patients')
+        .from("patients")
         .update({ status: "Completed" })
-        .eq('id', selectedPatient.id);
-
+        .eq("id", selectedPatient.id);
       if (statusError) throw statusError;
 
-      // Refresh patient data
-      await fetchPatients();
-      
+      // ✅ CHANGED: Instead of refetching, update patients state directly
+      setPatients((prev) =>
+        prev.map((p) =>
+          p.id === selectedPatient.id
+            ? {
+                ...p,
+                status: "Completed",
+                prescriptions: [
+                  { prescription_text: prescription.trim() },
+                  ...(p.prescriptions || []),
+                ],
+              }
+            : p
+        )
+      );
+
+      // ✅ This automatically updates stats cards because they read from patients state
+
       setPrescription("");
       setSelectedPatient(null);
-      
+
       toast({
         title: "Prescription Added",
         description: `Prescription saved successfully for ${selectedPatient.name}`,
       });
     } catch (error) {
-      console.error('Error saving prescription:', error);
+      console.error("Error saving prescription:", error);
       toast({
         title: "Error",
         description: "Failed to save prescription. Please try again.",
@@ -160,10 +163,14 @@ const DoctorDashboard = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "Waiting": return "bg-yellow-100 text-yellow-800";
-      case "In Consultation": return "bg-blue-100 text-blue-800";
-      case "Completed": return "bg-green-100 text-green-800";
-      default: return "bg-gray-100 text-gray-800";
+      case "Waiting":
+        return "bg-yellow-100 text-yellow-800";
+      case "In Consultation":
+        return "bg-blue-100 text-blue-800";
+      case "Completed":
+        return "bg-green-100 text-green-800";
+      default:
+        return "bg-gray-100 text-gray-800";
     }
   };
 
@@ -182,18 +189,20 @@ const DoctorDashboard = () => {
 
   const startConsultation = async (patient: Patient) => {
     try {
-      // Update patient status in database
       const { error } = await supabase
-        .from('patients')
+        .from("patients")
         .update({ status: "In Consultation" })
-        .eq('id', patient.id);
+        .eq("id", patient.id);
 
       if (error) throw error;
 
-      // Update local state
-      setPatients(patients.map(p => 
-        p.id === patient.id ? { ...p, status: "In Consultation" } : p
-      ));
+      // ✅ Update local state directly
+      setPatients((prev) =>
+        prev.map((p) =>
+          p.id === patient.id ? { ...p, status: "In Consultation" } : p
+        )
+      );
+
       setSelectedPatient(patient);
 
       toast({
@@ -201,7 +210,7 @@ const DoctorDashboard = () => {
         description: `Started consultation for ${patient.name}`,
       });
     } catch (error) {
-      console.error('Error starting consultation:', error);
+      console.error("Error starting consultation:", error);
       toast({
         title: "Error",
         description: "Failed to start consultation. Please try again.",
@@ -219,8 +228,12 @@ const DoctorDashboard = () => {
             <div className="flex items-center gap-3">
               <Stethoscope className="h-8 w-8 text-medical-blue" />
               <div>
-                <h1 className="text-xl font-bold text-foreground">Doctor Dashboard</h1>
-                <p className="text-sm text-medical-gray">Patient consultations and prescriptions</p>
+                <h1 className="text-xl font-bold text-foreground">
+                  Doctor Dashboard
+                </h1>
+                <p className="text-sm text-medical-gray">
+                  Patient consultations and prescriptions
+                </p>
               </div>
             </div>
             <Button variant="ghost" size="sm" onClick={handleLogout}>
@@ -232,18 +245,20 @@ const DoctorDashboard = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
+        {/* ✅ Stats Cards read directly from patients state (auto-updates) */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Patients</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Total Patients
+              </CardTitle>
               <User className="h-4 w-4 text-medical-blue" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{patients.length}</div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Waiting</CardTitle>
@@ -251,23 +266,25 @@ const DoctorDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {patients.filter(p => p.status === "Waiting").length}
+                {patients.filter((p) => p.status === "Waiting").length}
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">In Consultation</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                In Consultation
+              </CardTitle>
               <Stethoscope className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {patients.filter(p => p.status === "In Consultation").length}
+                {patients.filter((p) => p.status === "In Consultation").length}
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Completed</CardTitle>
@@ -275,7 +292,7 @@ const DoctorDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {patients.filter(p => p.status === "Completed").length}
+                {patients.filter((p) => p.status === "Completed").length}
               </div>
             </CardContent>
           </Card>

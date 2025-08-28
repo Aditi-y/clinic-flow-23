@@ -63,7 +63,6 @@ const ReceptionistDashboard = () => {
     setLoading(true);
 
     try {
-      // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         toast({
@@ -74,14 +73,12 @@ const ReceptionistDashboard = () => {
         return;
       }
 
-      // Generate token based on existing patients count
       const { count } = await supabase
         .from('patients')
         .select('*', { count: 'exact', head: true });
 
       const token = `T${String((count || 0) + 1).padStart(3, '0')}`;
 
-      // Insert patient into Supabase
       const { data, error } = await supabase
         .from('patients')
         .insert({
@@ -100,8 +97,9 @@ const ReceptionistDashboard = () => {
 
       if (error) throw error;
 
-      // Refresh patients list
-      await fetchPatients();
+      // 🔹 UPDATED: Instead of refetching all patients, add new one directly to local state
+      setPatients((prev) => [data, ...prev]);
+
       setNewPatient({ name: "", age: "", gender: "", contact: "", symptoms: "" });
       setShowAddForm(false);
 
@@ -130,8 +128,12 @@ const ReceptionistDashboard = () => {
 
       if (error) throw error;
 
-      // Refresh patients list
-      await fetchPatients();
+      // 🔹 UPDATED: Update charges in local state immediately
+      setPatients((prev) =>
+        prev.map((p) =>
+          p.id === patientId ? { ...p, charges } : p
+        )
+      );
 
       toast({
         title: "Charges Updated",
@@ -159,8 +161,8 @@ const ReceptionistDashboard = () => {
 
       if (error) throw error;
 
-      // Refresh patients list
-      await fetchPatients();
+      // 🔹 UPDATED: Remove patient from local state instead of refetch
+      setPatients((prev) => prev.filter((p) => p.id !== patientId));
 
       toast({
         title: "Patient Deleted",
