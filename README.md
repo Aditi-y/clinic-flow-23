@@ -26,6 +26,6 @@ Frontend:
 - Tailwind CSS
 
 Backend: 
-- Superbase (authentication, real-time database, storage)
+- Supabase (authentication, real-time database, storage)
 
 
