@@ -25,8 +25,37 @@ const Login = ({ userType }: LoginProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Check if user is already logged in
+  // User type configuration
+  const userTypeConfig = {
+    doctor: {
+      title: "Doctor Portal",
+      icon: Stethoscope,
+      description: "Access patient records and manage prescriptions",
+      redirectTo: "/doctor-dashboard"
+    },
+    receptionist: {
+      title: "Receptionist Portal", 
+      icon: UserCog,
+      description: "Manage patient registration and appointments",
+      redirectTo: "/receptionist-dashboard"
+    }
+  };
+
+  const config = userTypeConfig[userType];
+
+  // Check if user is already logged in and set up auth state listener
   useEffect(() => {
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (session) {
+          // User is authenticated, redirect to appropriate dashboard
+          navigate(config.redirectTo);
+        }
+      }
+    );
+
+    // THEN check for existing session
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
@@ -34,7 +63,9 @@ const Login = ({ userType }: LoginProps) => {
       }
     };
     checkAuth();
-  }, []);
+
+    return () => subscription.unsubscribe();
+  }, [config.redirectTo, navigate]);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,23 +112,6 @@ const Login = ({ userType }: LoginProps) => {
     }
   };
 
-
-  const userTypeConfig = {
-    doctor: {
-      title: "Doctor Portal",
-      icon: Stethoscope,
-      description: "Access patient records and manage prescriptions",
-      redirectTo: "/doctor-dashboard"
-    },
-    receptionist: {
-      title: "Receptionist Portal", 
-      icon: UserCog,
-      description: "Manage patient registration and appointments",
-      redirectTo: "/receptionist-dashboard"
-    }
-  };
-
-  const config = userTypeConfig[userType];
   const IconComponent = config.icon;
 
   return (
