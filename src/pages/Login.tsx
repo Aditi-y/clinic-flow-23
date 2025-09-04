@@ -73,7 +73,7 @@ const Login = ({ userType }: LoginProps) => {
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: formData.email,
           password: formData.password,
           options: {
@@ -86,6 +86,20 @@ const Login = ({ userType }: LoginProps) => {
         });
 
         if (error) throw error;
+
+        // Assign role to the user after successful signup
+        if (data.user) {
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .insert({
+              user_id: data.user.id,
+              role: userType
+            });
+          
+          if (roleError) {
+            console.error('Error assigning role:', roleError);
+          }
+        }
 
         toast({
           title: "Check your email",
