@@ -85,7 +85,28 @@ const Login = ({ userType }: LoginProps) => {
           }
         });
 
-        if (error) throw error;
+        if (error) {
+          if (error.message.includes("User already registered")) {
+            toast({
+              title: "Account already exists",
+              description: (
+                <div>
+                  This email is already registered. 
+                  <button 
+                    onClick={handleResendConfirmation}
+                    className="ml-2 text-primary underline hover:no-underline"
+                  >
+                    Resend confirmation email
+                  </button>
+                </div>
+              ),
+              variant: "destructive",
+            });
+            setIsLoading(false);
+            return;
+          }
+          throw error;
+        }
 
         // Assign role to the user after successful signup
         if (data.user) {
@@ -101,9 +122,35 @@ const Login = ({ userType }: LoginProps) => {
           }
         }
 
+        // Send custom confirmation email
+        try {
+          const emailResponse = await supabase.functions.invoke('send-confirmation', {
+            body: {
+              email: formData.email,
+              userType: userType
+            }
+          });
+
+          if (emailResponse.error) {
+            console.error('Error sending confirmation email:', emailResponse.error);
+          }
+        } catch (emailError) {
+          console.error('Failed to send custom confirmation email:', emailError);
+        }
+
         toast({
-          title: "Check your email",
-          description: "We've sent you a confirmation link to complete your registration.",
+          title: "Account created successfully!",
+          description: (
+            <div>
+              We've sent you a confirmation email. Please check your inbox and click the verification link.
+              <button 
+                onClick={handleResendConfirmation}
+                className="ml-2 text-primary underline hover:no-underline block mt-2"
+              >
+                Didn't receive it? Resend email
+              </button>
+            </div>
+          ),
         });
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -123,6 +170,54 @@ const Login = ({ userType }: LoginProps) => {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!formData.email) {
+      toast({
+        title: "Email required",
+        description: "Please enter your email address first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      // Resend Supabase verification email
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: formData.email,
+        options: {
+          emailRedirectTo: `${window.location.origin}${config.redirectTo}`
+        }
+      });
+
+      if (error) throw error;
+
+      // Send custom confirmation email
+      try {
+        await supabase.functions.invoke('send-confirmation', {
+          body: {
+            email: formData.email,
+            userType: userType
+          }
+        });
+      } catch (emailError) {
+        console.error('Failed to send custom confirmation email:', emailError);
+      }
+
+      toast({
+        title: "Confirmation email resent",
+        description: "Please check your inbox for the verification email.",
+      });
+    } catch (error: any) {
+      console.error('Resend error:', error);
+      toast({
+        title: "Failed to resend email",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
