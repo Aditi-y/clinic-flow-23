@@ -121,7 +121,7 @@ const Login = ({ userType }: LoginProps) => {
             console.error('Error assigning role:', roleError);
           }
         }
-
+        //updated email implementation
         // Send custom confirmation email
         try {
           const emailResponse = await supabase.functions.invoke('send-confirmation', {
