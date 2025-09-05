@@ -98,8 +98,7 @@ const ReceptionistDashboard = () => {
           contact: newPatient.contact,
           symptoms: newPatient.symptoms,
           status: "Waiting",
-          charges: 0,
-          user_id: user.id
+          charges: 0
         })
         .select()
         .single();
